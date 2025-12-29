@@ -2,15 +2,21 @@
 #include <rclcpp/rclcpp.hpp>
 
 #if NPP_AVAILABLE
+#include <cuda_runtime.h>
 #include <npp.h>
+#include <nppcore.h>
+#include <nppi.h>
 #include <nppi_data_exchange_and_initialization.h>
 #include <nppi_geometry_transforms.h>
 #include <nppi_support_functions.h>
 #endif
 
-#include <image_geometry/pinhole_camera_model.h>
-#include <cv_bridge/cv_bridge.h>
+#include <image_geometry/pinhole_camera_model.hpp>
+#include <cv_bridge/cv_bridge.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <iostream>
+#include <opencv2/core.hpp>
+#include <memory>
 
 #ifdef OPENCV_CUDA_AVAILABLE
 // #include <opencv2/cudafeatures2d.hpp>
@@ -124,7 +130,7 @@ NPPRectifier::NPPRectifier(int width, int height,
                            const Npp32f *map_x, const Npp32f *map_y)
     : pxl_map_x_(nullptr), pxl_map_y_(nullptr) {
     cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking);
-    nppSetStream(stream_);
+    InitNppStreamContext();
 
     pxl_map_x_ = nppiMalloc_32f_C1(width, height, &pxl_map_x_step_);
     if (pxl_map_x_ == nullptr) {
@@ -155,7 +161,7 @@ NPPRectifier::NPPRectifier(int width, int height,
 NPPRectifier::NPPRectifier(const CameraInfo& info, double alpha) {
     cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking);
 
-    nppSetStream(stream_);
+    InitNppStreamContext();
 
     pxl_map_x_ = nppiMalloc_32f_C1(info.width, info.height, &pxl_map_x_step_);
     if (pxl_map_x_ == nullptr) {
@@ -217,8 +223,23 @@ NPPRectifier::~NPPRectifier() {
     cudaStreamDestroy(stream_);
 }
 
+void NPPRectifier::InitNppStreamContext() {
+    npp_stream_context_.hStream = stream_;
+    cudaGetDevice(&npp_stream_context_.nCudaDeviceId);
+    cudaDeviceProp dev_prop;
+    cudaGetDeviceProperties(&dev_prop, npp_stream_context_.nCudaDeviceId);
+    npp_stream_context_.nMultiProcessorCount = dev_prop.multiProcessorCount;
+    npp_stream_context_.nMaxThreadsPerMultiProcessor = dev_prop.maxThreadsPerMultiProcessor;
+    npp_stream_context_.nMaxThreadsPerBlock = dev_prop.maxThreadsPerBlock;
+    npp_stream_context_.nSharedMemPerBlock = dev_prop.sharedMemPerBlock;
+    cudaDeviceGetAttribute(&npp_stream_context_.nCudaDevAttrComputeCapabilityMajor,
+                           cudaDevAttrComputeCapabilityMajor, npp_stream_context_.nCudaDeviceId);
+    cudaDeviceGetAttribute(&npp_stream_context_.nCudaDevAttrComputeCapabilityMinor,
+                           cudaDevAttrComputeCapabilityMinor, npp_stream_context_.nCudaDeviceId);
+    cudaStreamGetFlags(stream_, &npp_stream_context_.nStreamFlags);
+}
+
 Image::UniquePtr NPPRectifier::rectify(const Image &msg) {
-    nppSetStream(stream_);
     Image::UniquePtr result = std::make_unique<Image>();
     result->header = msg.header;
     result->height = msg.height;
@@ -237,10 +258,10 @@ Image::UniquePtr NPPRectifier::rectify(const Image &msg) {
 
     NppiInterpolationMode interpolation = NPPI_INTER_LINEAR;
 
-    CHECK_NPP(nppiRemap_8u_C3R(
+    CHECK_NPP(nppiRemap_8u_C3R_Ctx(
         src_, src_size, src_step_, src_roi,
         pxl_map_x_, pxl_map_x_step_, pxl_map_y_, pxl_map_y_step_,
-        dst_, dst_step_, dst_roi_size, interpolation));
+        dst_, dst_step_, dst_roi_size, interpolation, npp_stream_context_));
 
     CHECK_CUDA(cudaMemcpy2DAsync(static_cast<void*>(result->data.data()),
                                  result->step,

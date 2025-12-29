@@ -1,5 +1,7 @@
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <iostream>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -224,13 +226,14 @@ CompressedImage::UniquePtr NVJPEGCompressor::compress(const Image &msg, int qual
 
     nvjpegEncoderParamsSetQuality(params_, quality, stream_);
 
-    nvjpegInputFormat_t input_format;
+    nvjpegInputFormat_t input_format = NVJPEG_INPUT_RGBI;
     if (format == ImageFormat::RGB) {
         input_format = NVJPEG_INPUT_RGBI;
     } else if (format == ImageFormat::BGR) {
         input_format = NVJPEG_INPUT_BGRI;
     } else {
         std::cerr << "Specified ImageFormat is not supported" << std::endl;
+        return nullptr;
     }
     setNVImage(msg);
     CHECK_NVJPEG(nvjpegEncodeImage(handle_, state_, params_, &nv_image_, input_format,

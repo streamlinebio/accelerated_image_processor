@@ -3,6 +3,7 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <optional>
+#include <memory>
 
 #include <opencv2/core.hpp>
 #ifdef OPENCV_CUDA_AVAILABLE
@@ -11,6 +12,7 @@
 
 #if NPP_AVAILABLE
 #include <nppdefs.h>
+#include <nppcore.h>
 #endif
 
 using CameraInfo = sensor_msgs::msg::CameraInfo;
@@ -48,6 +50,7 @@ protected:
 class NPPRectifier : public RectifierBase {
 public:
     cudaStream_t stream_;
+    NppStreamContext npp_stream_context_;
 
     NPPRectifier(int width, int height,
                  const Npp32f *map_x, const Npp32f *map_y);
@@ -58,6 +61,8 @@ public:
 
     Image::UniquePtr rectify(const Image &msg) override;
 private:
+    void InitNppStreamContext();
+
     Npp32f *pxl_map_x_;
     Npp32f *pxl_map_y_;
     int pxl_map_x_step_;
