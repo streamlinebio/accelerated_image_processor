@@ -4,6 +4,7 @@ project(accelerated_image_processor LANGUAGES CUDA CXX)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 find_package(ament_cmake_auto REQUIRED)
+find_package(image_geometry REQUIRED)
 find_package (LibJpegTurbo)
 
 if (${LibJpegTurbo_FOUND})
@@ -95,6 +96,7 @@ if (JETSON)
     /usr/src/jetson_multimedia_api/samples/common/classes/NvJpegEncoder.cpp
     /usr/src/jetson_multimedia_api/samples/common/classes/NvLogging.cpp
   )
+  ament_target_dependencies(jpeg_compressor sensor_msgs)
   target_include_directories(jpeg_compressor PUBLIC
     ${CUDA_INCLUDE_DIR}
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
@@ -114,11 +116,9 @@ if (JETSON)
     color_space
   )
 
-  message(STATUS "Using Jetson Multimedia API")
-
-  # include_directories(/usr/local/include/opencv4)
   ament_auto_add_library(rectifier SHARED
     src/accelerator/rectifier.cpp)
+  ament_target_dependencies(rectifier image_geometry sensor_msgs cv_bridge)
   target_include_directories(rectifier PUBLIC
     ${CUDA_INCLUDE_DIR}
     ${OpenCV_INCLUDE_DIRS}
@@ -166,6 +166,7 @@ else()
   ament_auto_add_library(jpeg_compressor SHARED
     src/accelerator/jpeg_compressor.cpp
   )
+  ament_target_dependencies(jpeg_compressor sensor_msgs)
   target_include_directories(jpeg_compressor PUBLIC
     ${CUDA_INCLUDE_DIR}
     ${CUDA_NPP_INCLUDES}
@@ -185,6 +186,7 @@ else()
 
   ament_auto_add_library(rectifier SHARED
     src/accelerator/rectifier.cpp)
+  ament_target_dependencies(rectifier image_geometry sensor_msgs cv_bridge)
   target_include_directories(rectifier PUBLIC
     ${CUDA_INCLUDE_DIR}
     ${CUDA_NPP_INCLUDES}
